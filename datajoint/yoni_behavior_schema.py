@@ -10,13 +10,18 @@ import h5py
 
 from allensdk.brain_observatory.ecephys.ecephys_project_cache import EcephysProjectCache
 
+data_directory = 'C:\\Users\\yoni.browning\\Documents\\DataJoint\\AllenData'
+manifest_path = os.path.join(data_directory, "manifest.json")
+cache = EcephysProjectCache.from_warehouse(manifest=manifest_path)
+
+
 # Establish connection to the datajoint
 dj.config['database.host'] = '34.82.94.188'
 dj.config['database.user'] = 'yonib'
 dj.config['database.password'] = 'yonib'
 dj.conn()
 
-schema  = dj.schema('yonib_behavior_test',locals())
+schema  = dj.schema('yonib_behavior_schema_v2',locals())
 
 def get_first_value(value):
     if isinstance(value,str):
@@ -274,7 +279,7 @@ class AllenSDKSessionIngest(dj.Imported):
             }
         Session().insert1(session_data,skip_duplicates = True)
         print('Added Session')
-        '''
+        
         ### Add Probe data
         # All of this info is probably in the session struct somewhere, but I am too lazy to find it.
         probe_df = probes[probes['ecephys_session_id']==session_id].copy() #Copy is just to stop errors from being spit out.
@@ -370,7 +375,7 @@ class AllenSDKSessionIngest(dj.Imported):
                            'velocity':session.running_speed.velocity.values},
                           skip_duplicates=True)
         print('Added Running')
-        '''
+        
         ### Add other behavior data
         # Get the stimulus presentations
         rf_stim_table = session.stimulus_presentations
