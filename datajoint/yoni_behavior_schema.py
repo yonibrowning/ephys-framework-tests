@@ -456,5 +456,114 @@ class TrialSpikeCountCompute(dj.Computed):
 
         self.insert1(key) # add to the 
 
+        
+def compute_rf(unit_id):
+    rf_df = ((TrialSpikeCount()&['unit_id = ' +str(unit_id)])*(Stimulus())&'stimulus_name = "gabors"').fetch(format = 'frame')
+    C = rf_df[['x_position','y_position','spike_rate']].groupby(['x_position','y_position']).mean()
+    x_vals = np.unique(C.index.get_level_values(0)).astype('float')
+    y_vals = np.unique(C.index.get_level_values(1)).astype('float')
+    return np.reshape(C.spike_rate.values,(len(x_vals),len(y_vals))),x_vals,y_vals
+
+def compute_static_response(unit_id):
+    static_frame = ((TrialSpikeCount()&['unit_id = ' +str(unit_id)])*(Stimulus())&'stimulus_name = "static_gratings"').fetch(format = 'frame')
+    C = static_frame[['spatial_frequency','orientation','spike_rate']].groupby(['spatial_frequency','orientation']).mean()
+    freq_vals= np.unique(C.index.get_level_values(0)).astype('float')
+    orient_vals = np.unique(C.index.get_level_values(1)).astype('float')
+    return np.reshape(C.spike_rate.values,(len(freq_vals),len(orient_vals))),freq_vals,orient_vals
+
+def compute_drifting_response(unit_id):
+    static_frame = ((TrialSpikeCount()&['unit_id = ' +str(unit_id)])*(Stimulus())&'stimulus_name = "drifting_gratings"').fetch(format = 'frame')
+    C = static_frame[['temporal_frequency','orientation','spike_rate']].groupby(['temporal_frequency','orientation']).mean()
+    freq_vals= np.unique(C.index.get_level_values(0)).astype('float')
+    orient_vals = np.unique(C.index.get_level_values(1)).astype('float')
+    return np.reshape(C.spike_rate.values,(len(freq_vals),len(orient_vals))),freq_vals,orient_vals
+
+
+
+
+
+@schema
+class GaborRF(dj.Manual):
+    definition = """
+    ->Session
+    ->SpikeTrain
+    ---
+    receptive_field:mediumblob
+    x:tinyblob
+    y:tinyblob
+    """
+    
+@schema
+class StaticResponse(dj.Manual):
+    definition = """
+    ->Session
+    ->SpikeTrain
+    ---
+    static_response:mediumblob
+    spatial_frequency:tinyblob
+    orientation:tinyblob
+    """
+    
+@schema
+class DriftingResponse(dj.Manual):
+    definition = """
+    ->Session
+    ->SpikeTrain
+    ---
+    drifting_response:mediumblob
+    temporal_frequency:tinyblob
+    orientation:tinyblob
+    """
+
+@schema 
+class ReceptiveFieldCompute(dj.Computed):
+    definition = """
+    ->Session
+    """
+    def make(self,keys):
+        print('Session ID: ' + str(keys['session_id']))
+        units = (Unit()&(Channel()&(Probe()&(Session()&keys)))).fetch('unit_id')
+        receptive_field = [None]*len(units)
+        x = [None]*len(units)
+        y = [None]*len(units)
+        
+        static_response = [None]*len(units)
+        spatial_frequency = [None]*len(units)
+        s_orientation = [None]*len(units)
+        
+        drifting_response = [None]*len(units)
+        temporal_frequency = [None]*len(units)
+        d_orientation = [None]*len(units)
+        
+        for ii,unit_id in enumerate(units):
+            (receptive_field[ii],x[ii],y[ii]) = compute_rf(unit_id)
+            (static_response[ii],spatial_frequency[ii],s_orientation[ii]) = compute_static_response(unit_id)
+            (drifting_response[ii],temporal_frequency[ii],d_orientation[ii]) = compute_drifting_response(unit_id)
+
+            print('Unit ' + str(unit_id) + ': ' + str(ii) + ' of ' + str(len(units)))
+            
+        A = pd.DataFrame({'session_id':keys['session_id'],\
+                      'unit_id':units,\
+                      'receptive_field':receptive_field,\
+                      'x':x,\
+                      'y':y}).to_dict(orient = 'records')
+        
+        B = pd.DataFrame({'session_id':keys['session_id'],\
+              'unit_id':units,\
+              'static_response':static_response,\
+              'spatial_frequency':spatial_frequency,\
+              'orientation':s_orientation}).to_dict(orient = 'records')
+        
+        C = pd.DataFrame({'session_id':keys['session_id'],\
+              'unit_id':units,\
+              'drifting_response':drifting_response,\
+              'temporal_frequency':temporal_frequency,\
+              'orientation':d_orientation}).to_dict(orient = 'records')
+        
+        GaborRF.insert(A,skip_duplicates=True)
+        StaticResponse.insert(B,skip_duplicates=True)
+        DriftingResponse.insert(C,skip_duplicates=True)
+        self.insert1(keys)
+            
 
 dj.ERD(schema)
